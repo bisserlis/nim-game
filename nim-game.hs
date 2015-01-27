@@ -1,37 +1,72 @@
-import qualified Data.Bits   as Bit
-import qualified Data.Map    as Map
-import           Data.List
-import           Data.Word   (Word64, Word8) -- 64 bit unsigned integer
-import           Data.Maybe
-import           Data.Char
-import           Data.List.Utils (replace)
+import qualified Data.Bits as Bit
+import qualified Data.Map  as Map
+import Data.Word       (Word64)
+import Data.List.Utils (replace)
+import Data.List       
+import Data.Char
 
+data NimPosition = NimPosition (Map.Map Word64 Word64)
+                 deriving (Eq)
+-- A NimPosition is constructed from a map from Word64 to Word64. The
+-- keys correspond to the distinct pile sizes, and the values
+-- correspond to the number of piles with that size.
 
 data Player = Human
             | Computer
-            deriving (Eq, Show, Bounded)
 
-instance Enum Player where
-  succ Human    = Computer
-  succ Computer = Human
+data GameState = Game
+                 { player   :: Player
+                 , position :: NimPosition }
 
-  fromEnum Human    = 0
-  fromEnum Computer = 1
-
-  toEnum 0 = Human
-  toEnum 1 = Computer
-
-data GameState = Game { player :: Player, position :: NimPosition }
-
-instance Show GameState where
-  show (Game Human position)    = "Computer's play => " ++
-                                  show position ++
-                                  "\n" ++
-                                  "Your turn    ====> "
-  show (Game Computer position) = ""
-  
 data Bit = Bit Bool
          deriving (Eq, Ord)
+
+data Binary = Binary [Bit]
+            deriving (Eq, Ord)
+
+
+
+insertWithCounts :: Word64
+                 -> Map.Map Word64 Word64
+                 -> Map.Map Word64 Word64
+-- Insert an Word64 into a map as a key. If that Word64 is already present
+-- in the map as a key, then increase the value by 1. If the Word64 is
+-- not already present, give it the default value of 1.
+insertWithCounts pileSize oldMap =
+  Map.insertWith (\_ y -> y + 1) pileSize 1 oldMap        
+
+
+fromList :: [Word64] -> NimPosition
+-- Construct a NimPosition from a list of Word64, where each Word64 is a
+-- pile.
+fromList xs = NimPosition (foldr insertWithCounts Map.empty xs)
+
+
+
+toList :: NimPosition -> [Word64]
+-- Convert a NimPosition into a list of Word64, where each Word64 in the list
+-- corresponds to a pile.
+toList (NimPosition position) = 
+    let pileSizes = Map.keys  position
+        pileQtys  = Map.elems position
+        pileLists = zipWith replicate (map fromIntegral pileQtys) pileSizes
+    in foldr1 (++) pileLists
+
+
+
+instance Show NimPosition where
+  show position =
+    let nimPileList             = (show . toList) position
+        commaSeparatedPileSizes = (init . tail  ) nimPileList
+        spaceSeparatedPileSizes = replace "," " " commaSeparatedPileSizes
+    in spaceSeparatedPileSizes
+
+
+instance Show GameState where
+  show (Game Human position) = "Computer's play....=> " ++ show position ++ "\n"
+                               ++ "Your turn..........=> "
+  show (Game Computer position) = ""
+  
 
 toBit 0 = Bit False
 toBit _ = Bit True
@@ -40,8 +75,6 @@ instance Show Bit where
   show (Bit False) = "0"
   show (Bit True ) = "1"
 
-data Binary = Binary [Bit]
-            deriving (Eq, Ord)
 
 toBitList :: Integral a => a -> [Bit]
 toBitList 0 = []
@@ -54,42 +87,6 @@ toBinary n = (Binary . toBitList) n
 instance Show Binary where
   show (Binary bitList) = concat $ (map show) . reverse $ bitList
 
-data NimPosition = NimPosition (Map.Map Word64 Word64)
-                 deriving (Eq)
--- A NimPosition is constructed from a map from Word64 to Word64
---The keys correspond to the distinct pile sizes, and the values correspond to
---the number of piles with that size.
-
-instance Show NimPosition where
-  show position =
-    let nimPileList             = (show . toList) position
-        commaSeparatedPileSizes = (init . tail  ) nimPileList
-        spaceSeparatedPileSizes = replace "," " " commaSeparatedPileSizes
-    in spaceSeparatedPileSizes
-
-
-insertWithCounts :: Word64 -> Map.Map Word64 Word64 -> Map.Map Word64 Word64
--- Insert an Word64 into a map as a key. If that Word64 is already present
--- in the map as a key, then increase the value by 1. If the Word64 is
--- not already present, give it the default value of 1.
-insertWithCounts pileSize oldMap = Map.insertWith (\_ y -> y + 1)
-                                                  pileSize
-                                                  1     -- default value
-                                                  oldMap        
-
-toList :: NimPosition -> [Word64]
--- Convert a NimPosition into a list of Word64, where each Word64 in the list
--- corresponds to a pile.
-toList (NimPosition position) = 
-    let pileSizes = Map.keys  position
-        pileQtys  = Map.elems position
-        pileLists = zipWith replicate (map fromIntegral pileQtys) pileSizes
-    in foldr1 (++) pileLists
-
-fromList :: [Word64] -> NimPosition
--- Construct a NimPosition from a list of Word64, where each Word64 is a
--- pile.
-fromList xs = NimPosition (foldr insertWithCounts Map.empty xs)
 
 positionSum :: NimPosition -> Word64
 -- Compute the bitwise xor of the pile sizes.
@@ -100,8 +97,12 @@ winning :: NimPosition -> Bool
 -- bitwise exclusive or of the pile sizes is exactly zero.
 winning position = (positionSum position == 0)
 
+
 losing :: NimPosition -> Bool
 losing position = (sum . toList) position == 1
+
+terminal :: NimPosition -> Bool
+terminal position = (sum . toList) position == 0
 
 findNumWithLeadingBit :: [Word64] -> Maybe Word64
 findNumWithLeadingBit xs
@@ -124,6 +125,7 @@ isValidMove prevPosition nextPosition =
       (originalSize:[],resultantSize:[]) | resultantSize < originalSize -> True
                                          | otherwise                    -> False
       _ -> False
+
 
 nextMove :: NimPosition -> NimPosition
 nextMove prevPosition =
@@ -186,26 +188,25 @@ getValidNimPosition oldPosition = do
      getValidNimPosition oldPosition
    True  -> return newPosition
   
-
 takeTurns :: Maybe GameState -> IO (Maybe GameState)
 takeTurns Nothing = do putStrLn "Game Over!"; return Nothing
-takeTurns (Just currentState) = do
-  (putStr . show) currentState
-  case losing $ position currentState of
-    True -> do putStrLn "Game over!"
-               return Nothing
-    _ ->
-      case player currentState of
-       Computer ->
-         let computersNextMove = nextMove $ position currentState
-             nextState = currentState { player   = Human,
-                                        position = computersNextMove}
-         in do takeTurns $ Just nextState
-       Human -> do
-         playersNextMove <- getValidNimPosition $ position currentState
-         let nextState = currentState { player   = Computer,
-                                        position = playersNextMove} 
-           in do takeTurns $ Just nextState
+takeTurns (Just currentState) =
+  let currentPosition = position currentState in
+  do (putStr . show) currentState
+     case (losing currentPosition) || (terminal currentPosition) of
+      True -> takeTurns Nothing
+      _ ->
+        case player currentState of
+         Computer ->
+           let computersNextMove = nextMove $ position currentState
+               nextState = currentState { player   = Human,
+                                       position = computersNextMove}
+           in takeTurns $ Just nextState
+         Human -> do
+           playersNextMove <- getValidNimPosition $ position currentState
+           let nextState = currentState { player   = Computer
+                                        , position = playersNextMove} in do
+             takeTurns $ Just nextState
 
 main = do
   putStr "Initial position => "

@@ -208,9 +208,33 @@ takeTurns (Just currentState) =
                                         , position = playersNextMove} in do
              takeTurns $ Just nextState
 
+data YesNo = Yes | No
+
+getYesOrNo :: IO (YesNo)
+getYesOrNo = do
+  input <- getLine
+  case input of
+   "yes" -> return Yes
+   "y"   -> return Yes
+   "no"  -> return No
+   "n"   -> return No
+   _     -> do putStr "Please enter 'yes' or 'no': "; getYesOrNo
+
+
+introduceGame :: IO ()
+introduceGame = putStrLn
+  "Welcome to Nim! To get started, enter your initial position, e.g. '1 3 5'"
+                
+
 main = do
-  putStr "Initial position => "
+  introduceGame
+  putStr "Initial position   => "
   startingPosition <- getNimPosition
   let initialGameState = Just Game { player = Computer,
                                      position = startingPosition }
     in takeTurns initialGameState
+  putStr "Would you like to continue? (y/n): "
+  shouldContinue <- getYesOrNo
+  case shouldContinue of
+   Yes -> main
+   No  -> do putStrLn "Goodbye!"; return ()

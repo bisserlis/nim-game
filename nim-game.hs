@@ -1,7 +1,6 @@
 import qualified Data.Bits as Bit
 import qualified Data.Map  as Map
 import Data.Word       (Word64)
-import Data.List.Utils (replace)
 import Data.List       
 import Data.Char
 
@@ -55,11 +54,8 @@ toList (NimPosition position) =
 
 
 instance Show NimPosition where
-  show position =
-    let nimPileList             = (show . toList) position
-        commaSeparatedPileSizes = (init . tail  ) nimPileList
-        spaceSeparatedPileSizes = replace "," " " commaSeparatedPileSizes
-    in spaceSeparatedPileSizes
+  show =
+    unwords . map show . toList
 
 
 instance Show GameState where
